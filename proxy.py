@@ -37,11 +37,11 @@ class Target(object):
         checkthreads = []
         if self.page > 0:
             for x in xrange(1, self.page):
-                # 根据要求修改页面链接
                 link = re.sub(urlpattern, str(x), self.pageurl)
                 self.links.append(link)
         else:
-            self.links.append(self.page)
+            self.links.append(self.pageurl)
+        print '.'*10 + "正在读取网站上的代理" + '.'*10
         for x in range(len(self.links)):
             t = GetProxy(self, self.links[x])
             getthreads.append(t)
@@ -58,13 +58,14 @@ class Target(object):
         for i in range(len(checkthreads)):
             checkthreads[i].join()
         print '.'*10+"总共有%s个代理通过校验" % len(checkedProxyList) +'.'*10
-        f = open("proxy_list.txt", 'w+')
+        f = open("proxy_list.txt", 'a')
         for proxy in checkedProxyList:
             proxyurl = proxy[0] + ":" + proxy[1]
             proxy_ok.append(proxyurl)
             f.write("%s:%s\r\n" % (proxy[0], proxy[1]))
         f.close()
         print '.'*10 + "成功存入文件 proxy_list.txt" + '.'*10
+        time.sleep(3)
 
 
 class GetProxy(threading.Thread):
@@ -82,7 +83,7 @@ class GetProxy(threading.Thread):
         while retry:
             # 默认使用代理
             try:
-                proxy_support = urllib2.ProxyHandler({})
+                proxy_support = urllib2.ProxyHandler({'http': '127.0.0.1:1080'})
                 opener = urllib2.build_opener(proxy_support)
                 urllib2.install_opener(opener)
                 request = urllib2.Request(self.link, None, self.header)
@@ -109,8 +110,8 @@ class CheckProxy(threading.Thread):
         threading.Thread.__init__(self)
         self.proxyList = proxyList
         self.timeout = 5
-        self.testStr = "030173"
-        self.testURL = "http://www.baidu.com"
+        self.testStr = "html"
+        self.testURL = "http://www.douban.com"
 
     def checkproxy(self):
         cookies = urllib2.HTTPCookieProcessor()
@@ -141,17 +142,37 @@ class CheckProxy(threading.Thread):
 
 
 def main():
-
-    # 网站1 pageurl, page, pattern, header 第一页的带页码地址，页码，正则，header
-    pageurl = r"www.proxy.com.ru/page_1.html"
-    page = 170
+    # 网站 pageurl, page, pattern, header 第一页的带页码地址，页码，正则，header
+    # 网站1  www.proxy.com.ru
+    pageurl = r"http://www.proxy.com.ru/list_1.html"
+    page = 176
     pattern = re.compile('<tr.*?<td>\d{1,4}</t.*?<td>(.*?)<.*?<td>(.*?)</td>', re.S)
     header = {
         'Referer': 'www.proxy.com.ru',
         'User-Agent': useragent,
         'Host': 'www.proxy.com.ru'
     }
-    Target(pageurl, page, pattern, header).run()
+    # Target(pageurl, page, pattern, header).run()
+
+    # 网站4 https://www.us-proxy.org/
+    pageurl = r"https://www.us-proxy.org/"
+    page = 0
+    pattern = re.compile('<tr><td>(.*?)</td><td>(\d{1,5})</td>', re.S)
+    header = {
+        'Referer': 'https://www.us-proxy.org/',
+        'User-Agent': useragent,
+    }
+    # Target(pageurl, page, pattern, header).run()
+
+    pageurl = r"http://www.cz88.net/proxy/"
+    page = 0
+    pattern = re.compile('<li><div.*?ip">(.*?)</div>.*?port">(.*?)</div>')
+    header = {
+        'Referer': 'www.cz88.net',
+        'User-Agent': useragent,
+        'Host': 'www.cz88.net'
+    }
+    # Target(pageurl, page, pattern, header).run()
 
 
 if __name__ == "__main__":

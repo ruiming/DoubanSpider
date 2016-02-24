@@ -44,25 +44,24 @@ for lines in fp.readlines():
 fp.close()
 
 
-# 爬取豆瓣所有标签下的所有书籍
+# 爬取豆瓣所有标签的标签名和标签链接
 class GetTags:
 
     # 初始化方法
     def __init__(self):
         # 代理设置
-        self.proxy_url = proxyList[-29]
+        self.proxy_url = proxyList[2]
         self.proxy = urllib2.ProxyHandler({"http": self.proxy_url})
         # 参数
         self.hostURL = 'http://book.douban.com/tag/'
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.37 (KHTML, like Gecko)'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.47 (KHTML, like Gecko)'
                           ' Chrome/48.1.2524.116 Safari/537.36',
             'Referer': 'http://book.douban.com/',
             'Host': 'book.douban.com',
             'Upgrade-Insecure-Requests': '1',
             'Connection': 'keep-alive'
         }
-        self.type = sys.getfilesystemencoding()
         # opener设置
         self.cookie = cookielib.LWPCookieJar()
         self.cookieHandler = urllib2.HTTPCookieProcessor(self.cookie)
@@ -99,12 +98,12 @@ class GetBooks(multiprocessing.Process):
         self.opener = None
         self.hosturl = 'http://book.douban.com/tag/'
 
-    # 获取标签页面的全部书籍链接并存入list,每次调用都从代理列表随机选一个
+    # 获取标签页面的全部书籍链接并存入list
     def get_tag_page(self):
         code = 0
         while code != 200:
             try:
-                # 代理设置,随机获取一个代理
+                # 代理设置,随机获取一个代理和UA
                 i = random.randint(0, len(proxyList)-1)
                 j = random.randint(0, len(UserAgent)-1)
                 headers = {
@@ -120,26 +119,27 @@ class GetBooks(multiprocessing.Process):
                 cookie = cookielib.LWPCookieJar()
                 cookiehandler = urllib2.HTTPCookieProcessor(cookie)
                 opener = urllib2.build_opener(cookiehandler, proxysupport, urllib2.HTTPHandler)
-                # 获取标签XX页代码
+                # 获取标签XX页的内容
                 request = urllib2.Request(self.taglink, None, headers)
+                time.sleep(random(8))
                 response = opener.open(request)
                 content = response.read()
                 # 匹配页面的书籍链接并存入booklinklist todo
-                pattern = re.compile('<dt.*?<a.*?"(.*?)?from', re.S)
+                pattern = re.compile('<dt.*?<a.*?"(.*?)\?from', re.S)
                 booklinks = re.findall(pattern, content)
                 if len(booklinks) > 0:
-                    name = self.tagname + ".txt"
-                    f = open(name, 'w+')
+                    filename = (self.tagname + ".txt").decode('UTF-8')
+                    f = open(filename, 'w+')
                     for booklink in booklinks:
                         booklinklist.append(booklink)
                         f.write("%s\r\n" % booklink)
                     f.close()
                     code = 200
-                    print "success -" + " 获取 " + self.tagname + " 标签书籍 -- "+ proxy_url
+                    print "success -" + " 获取 " + self.tagname + " 标签书籍 -- " + proxy_url
             except Exception, e:
-                print "fail    -" + " 获取 " + self.tagname + " 标签书籍，已重试-- "+ proxy_url
+                print "fail    -" + " 获取 " + self.tagname + " 标签书籍，已重试-- " + proxy_url
                 code = 0
-                time.sleep(8)
+                time.sleep(random(3))
 
     # 从某页获取该页全部书籍链接
     def get_page_booklinks(self):
@@ -151,16 +151,21 @@ class GetBooks(multiprocessing.Process):
     # 多进程，每个标签开一个进程处理
     def run(self):
         self.get_tag_page()
-        time.sleep(8)
+        time.sleep(5)
 
 
 # todo
 if __name__ == "__main__":
     gettags = []
     getbooks = []
-    n = 0
     GetTags().run()
-    while n < len(tagsLink):
+    process = []
+    for n in range(len(tagsLink)):
         p = GetBooks(tagsLink[n], tagsName[n], proxyList)
+        process.append(p)
         p.start()
         n += 1
+    for x in range(len(process)):
+        process[x].join()
+    print "over"
+
