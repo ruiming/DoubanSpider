@@ -111,7 +111,7 @@ class CheckProxy(threading.Thread):
         self.proxyList = proxyList
         self.timeout = 5
         self.testStr = "html"
-        self.testURL = "http://www.douban.com"
+        self.testURL = "http://www.baidu.com"
 
     def checkproxy(self):
         cookies = urllib2.HTTPCookieProcessor()
@@ -145,7 +145,7 @@ def main():
     # 网站 pageurl, page, pattern, header 第一页的带页码地址，页码，正则，header
     # 网站1  www.proxy.com.ru
     pageurl = r"http://www.proxy.com.ru/list_1.html"
-    page = 176
+    page = 100
     pattern = re.compile('<tr.*?<td>\d{1,4}</t.*?<td>(.*?)<.*?<td>(.*?)</td>', re.S)
     header = {
         'Referer': 'www.proxy.com.ru',
@@ -172,7 +172,7 @@ def main():
         'User-Agent': useragent,
         'Host': 'www.cz88.net'
     }
-    # Target(pageurl, page, pattern, header).run()
+    Target(pageurl, page, pattern, header).run()
 
 
 if __name__ == "__main__":

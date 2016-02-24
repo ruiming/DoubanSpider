@@ -4,19 +4,16 @@
 import urllib
 import urllib2
 import cookielib
-import json
-import os
 import random
 import re
-import sys
 import threading
+import os
 import multiprocessing
 import time
 import proxy
-from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
-
+number = 0
 tagsLink = []       # 标签链接
 tagsName = []       # 标签名
 booklinklist = []   # 豆瓣全部书籍链接
@@ -24,16 +21,7 @@ UserAgent = [
     'Mozilla/5.0 (Linux; Android 4.1.1; Nexus 7 Build/JRO03D) AppleWebKit/535.19 (KHTML, like Gecko) '
     'Chrome/18.0.1025.166  Safari/535.19',
     'Mozilla/5.0 (Android; Mobile; rv:14.0) Gecko/14.0 Firefox/14.0',
-    'Mozilla/5.0 (Windows NT 6.2; WOW64; rv:21.0) Gecko/20100101 Firefox/21.0',
-    'Mozilla/4.0 (compatible; MSIE 7.0; Windows Phone OS 7.0; Trident/3.1; IEMobile/7.0; LG; GW910)',
-    'Mozilla/5.0 (iPod; U; CPU like Mac OS X; en) AppleWebKit/420.1 (KHTML, like Gecko) Version/3.0 Mob'
-    'ile/3A101a Safari/419.3',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0',
-    'Mozilla/5.0 (compatible; WOW64; MSIE 10.0; Windows NT 6.2)',
-    'Opera/9.80 (Macintosh; Intel Mac OS X 10.6.8; U; en) Presto/2.9.168 Version/11.52',
-    'Mozilla/5.0 (iPod; U; CPU like Mac OS X; en) AppleWebKit/420.1 (KHTML, like Gecko) Version/3.0 M'
-    'obile/3A101a Safari/419.3'
-]                   # User-Agent池，9个
+]                   # User-Agent池
 proxyList = []      # proxy列表,proxy[0]则为代理地址和端口组合
 # proxyList = proxy.getproxylist()
 txtpath = r"proxy_list.txt"
@@ -50,7 +38,7 @@ class GetTags:
     # 初始化方法
     def __init__(self):
         # 代理设置
-        self.proxy_url = proxyList[2]
+        self.proxy_url = proxyList[3]
         self.proxy = urllib2.ProxyHandler({"http": self.proxy_url})
         # 参数
         self.hostURL = 'http://book.douban.com/tag/'
@@ -77,7 +65,7 @@ class GetTags:
         pattern = re.compile('\?focus=book')
         # 分别存放标签链接和标签名
         for tag in tags:
-            tagsLink.append(re.sub(pattern, 'book', tag.get('href').encode('utf-8')))
+            tagsLink.append(re.sub(pattern, r'book?start=', tag.get('href').encode('utf-8')))
             tagsName.append(tag.get_text().encode('utf-8'))
 
     # 获取全部链接和标签名，保存到全局变量tasLink和tagsName中
@@ -94,78 +82,117 @@ class GetBooks(multiprocessing.Process):
         self.taglink = taglink
         self.tagname = tagname
         self.proxylist = proxylist
-        self.content = None
-        self.opener = None
         self.hosturl = 'http://book.douban.com/tag/'
+
+    # 根据proxyurl获取opener
+    def get_opener(self, proxy_url):
+        # 代理设置,随机获取一个代理和UA
+        proxyurl = proxy_url
+        proxysupport = urllib2.ProxyHandler({"http": proxyurl})
+        # opener设置
+        cookie = cookielib.LWPCookieJar()
+        cookiehandler = urllib2.HTTPCookieProcessor(cookie)
+        opener = urllib2.build_opener(cookiehandler, proxysupport, urllib2.HTTPHandler)
+        return opener
+
+    # 获取proxyurl
+    def get_proxy(self):
+        i = random.randint(0, len(proxyList)-1)
+        proxyurl = self.proxylist[i]
+        return proxyurl
+
+    # 获取header
+    def get_header(self):
+        j = random.randint(0, len(UserAgent)-1)
+        header = {
+            'User-Agent': UserAgent[j],
+            'Referer': 'http://book.douban.com/',
+            'Host': 'www.douban.com',
+            'Upgrade-Insecure-Requests': '1',
+            'Connection': 'keep-alive'
+        }
+        return header
 
     # 获取标签页面的全部书籍链接并存入list
     def get_tag_page(self):
-        code = 0
-        while code != 200:
+        # retry 重试次数, count 同个代理的派去次数， page 书籍
+        retry, count, page = 0, 0, 0
+        proxyurl = self.get_proxy()
+        opener = self.get_opener(proxyurl)
+        header = self.get_header()
+        while True:
             try:
-                # 代理设置,随机获取一个代理和UA
-                i = random.randint(0, len(proxyList)-1)
-                j = random.randint(0, len(UserAgent)-1)
-                headers = {
-                    'User-Agent': UserAgent[j],
-                    'Referer': 'http://book.douban.com/',
-                    'Host': 'www.douban.com',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Connection': 'keep-alive'
-                }
-                proxy_url = self.proxylist[i]
-                proxysupport = urllib2.ProxyHandler({"http": proxy_url})
-                # opener设置
-                cookie = cookielib.LWPCookieJar()
-                cookiehandler = urllib2.HTTPCookieProcessor(cookie)
-                opener = urllib2.build_opener(cookiehandler, proxysupport, urllib2.HTTPHandler)
-                # 获取标签XX页的内容
-                request = urllib2.Request(self.taglink, None, headers)
-                time.sleep(random(8))
-                response = opener.open(request)
+                # 同个代理爬五次换UA
+                if count == 5:
+                    header = self.get_header()
+                # 同个代理爬十次代理
+                if count == 10:
+                    proxyurl = self.get_proxy()
+                    opener = self.get_opener(proxyurl)
+                    count = 0
+                # 每重试两次换一次UA和代理
+                if retry == 2:
+                    header = self.get_header()
+                    proxyurl = self.get_proxy()
+                    opener = self.get_opener(proxyurl)
+                    retry = 0
+                    count = 0
+                # 开始
+                pagelink = self.taglink + str(page)
+                request = urllib2.Request(pagelink, None, header)
+                response = opener.open(request, None, 8)
                 content = response.read()
-                # 匹配页面的书籍链接并存入booklinklist todo
-                pattern = re.compile('<dt.*?<a.*?"(.*?)\?from', re.S)
+                # 匹配页面的书籍索引号并存入booklinklist
+                pattern = re.compile('<dt.*?<a.*?subject/(.*?)/\?from', re.S)
                 booklinks = re.findall(pattern, content)
                 if len(booklinks) > 0:
-                    filename = (self.tagname + ".txt").decode('UTF-8')
-                    f = open(filename, 'w+')
+                    filename = ("book/" + self.tagname + ".txt").decode('UTF-8')
+                    f = open(filename, 'a')
                     for booklink in booklinks:
                         booklinklist.append(booklink)
                         f.write("%s\r\n" % booklink)
                     f.close()
-                    code = 200
-                    print "success -" + " 获取 " + self.tagname + " 标签书籍 -- " + proxy_url
+                    count += 1
+                    print "success - " + " 获取 " + self.tagname + " 标签第" + str(page/15+1) + "页书籍 -- " + proxyurl
+                    page += len(booklinks)
+                    # END 若该页面书籍数量在1-14本之间，则说明结束
+                    if page % 15 != 0:
+                        print "*****" + "已获取 " + self.tagname + " 标签下的全部 " + str(page) + " 本书籍"
+                        break
+                    # NEXT 爬取页面正常结束，开始下一页的爬取
+                    time.sleep(random.randint(1, 3))
+                # END 正则匹配不到，说明结束
+                elif response.getcode() == 200 and len(booklinks) == 0:
+                    print "----" + "已获取 " + self.tagname + " 标签下的全部 " + str(page) + " 本书籍"
+                    break
+            # ERROR 若报错
             except Exception, e:
-                print "fail    -" + " 获取 " + self.tagname + " 标签书籍，已重试-- " + proxy_url
-                code = 0
-                time.sleep(random(3))
-
-    # 从某页获取该页全部书籍链接
-    def get_page_booklinks(self):
-        # 该正则用于匹配该页书籍的全部链接
-        books_pattern = re.compile('<dd.*?href="(.*?)"', re.S)
-        books_url = re.findall(books_pattern, self.content)
-        return books_url
+                print "fail    - " + " 获取 " + self.tagname + " 标签第" + str(page/15+1) + "页书籍 -- " + proxyurl
+                retry += 1
+                time.sleep(random.randint(4, 8))
 
     # 多进程，每个标签开一个进程处理
     def run(self):
         self.get_tag_page()
-        time.sleep(5)
+        time.sleep(10)
 
 
 # todo
 if __name__ == "__main__":
     gettags = []
     getbooks = []
+    path = 'book'
+    path = path.strip()
+    if not os.path.exists(path):
+        os.makedirs(path)
     GetTags().run()
     process = []
-    for n in range(len(tagsLink)):
+    for n in range(len(tagsName)):
         p = GetBooks(tagsLink[n], tagsName[n], proxyList)
         process.append(p)
         p.start()
-        n += 1
-    for x in range(len(process)):
+        time.sleep(random.randint(0, 5))
+    for x in range(len(tagsName)):
         process[x].join()
-    print "over"
+    print " -- over"
 
