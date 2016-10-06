@@ -1,4 +1,4 @@
-# 豆瓣爬虫
+# 豆瓣爬虫(deprecated)
 
 运行环境：windows10 python2.7.11  
 第三方库：beautifulSoup
